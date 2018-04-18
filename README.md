@@ -9,7 +9,7 @@ https://www.youtube.com/watch?v=VasXpDko0VE&feature=youtu.be
 **Usage**
 $ python hackbox.py
 
-# Credit
+# Credits
 
 Shawar Khan https://twitter.com/ShawarkOFFICIAL
 
