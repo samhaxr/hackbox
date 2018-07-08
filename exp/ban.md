@@ -5,7 +5,7 @@
 |_| |_|\__,_|\___|_|\_\____/ \___//_/\_\ v1.0
 
 Author: Suleman Malik - samhax@protonmail.com 
-Tested on Mac OSX EI Capitan v10.11.6
+Tested on Mac OSX El Capitan v10.11.6
 
 [1]  - Xss
 [2]  - Exploits
