@@ -524,7 +524,7 @@ def repeat():
                 os.system('cd exp;chmod 777 gs.py;./gs.py ' + inp)
                 repeat()
             elif choice == 2:
-                os.system('cd exp;./gs.py --update')
+                os.system('cd exp;chmod 777 gs.py;./gs.py --update')
                 repeat()
         elif choice == 3:
             subd()
