@@ -1,25 +1,31 @@
-# HackB0x v1.0
+# HackB0x v2.0
+
 HackBox is the combination of awesome tools and techniques.
 
-Download HackB0x  `git clone https://github.com/samhaxr/hackbox.git`
+## Usage
 
-**Youtube Tutorial**
-https://www.youtube.com/watch?v=VasXpDko0VE&feature=youtu.be
+```bash
+git clone https://github.com/samhaxr/hackbox && cd hackbox
 
-**Usage**
+virtualenv venv && source venv/bin/activate
 
-`$ python hackbox.py`
+pip install -r requirements.txt
 
-`$ pip install -r requirements.txt`
+python hackbox.py
+```
+
+## YouTube Tutorial
+
+[![YouTube](/docs/hackbox.jpg)](https://www.youtube.com/watch?v=VasXpDko0VE)
 
 # Credits
 
-Shawar Khan https://twitter.com/ShawarkOFFICIAL
+Shawar Khan <https://twitter.com/ShawarkOFFICIAL>
 
-Jobart Abama https://twitter.com/jobertabma
+Jobart Abama <https://twitter.com/jobertabma>
 
-VulnersCom https://github.com/vulnersCom/getsploit
+VulnersCom <https://github.com/vulnersCom/getsploit>
 
-Erwin De Laat https://twitter.com/erwindelaat
+Erwin De Laat <https://twitter.com/erwindelaat>
 
-![Alt text](/hackbox.jpg?raw=true "Optional Title")
+thehappydinoa <https://twitter.com/thehappydinoa>

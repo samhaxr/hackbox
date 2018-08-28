@@ -1,11 +1,11 @@
  _   _            _    ____   ___       
 | | | | __ _  ___| | _| __ ) / _ \__  __
 | |_| |/ _` |/ __| |/ /  _ \| | | \ \/ /
-|  _  | (_| | (__|   <| |_) | |_| |>  < 
-|_| |_|\__,_|\___|_|\_\____/ \___//_/\_\ v1.0
+|  _  | (_| | (__|   <| |_) | |_| |>  <
+|_| |_|\__,_|\___|_|\_\____/ \___//_/\_\ v1.1
 
-Author: Suleman Malik - samhax@protonmail.com 
-Tested on Mac OSX EI Capitan v10.11.6
+Author: Suleman Malik - samhax@protonmail.com
+Tested on macOS EI Capitan v10.11.6
 
 [1]  - Xss
 [2]  - Exploits
@@ -19,3 +19,4 @@ Tested on Mac OSX EI Capitan v10.11.6
 [10] - Current Network Stats
 [11] - CORS Misconfig
 [12] - AWS S3 Misconfig
+[0]  - Exit
