@@ -1,3 +1,10 @@
+[![GitHub release](https://img.shields.io/badge/release-v2.0-brightgreen?style=flat-square)](https://github.com/samhaxr/hackbox/releases/tag/1.1.2)
+[![GitHub stars](https://img.shields.io/github/stars/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/network)
+[![GitHub issues](https://img.shields.io/github/issues/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/issues)
+[![GitHub pulls](https://img.shields.io/github/issues-pr/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/pulls)
+[![GitHub license](https://img.shields.io/github/license/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/blob/main/LICENSE)
+
 # HackB0x v2.0
 
 HackBox is the combination of awesome tools and techniques.
