@@ -3,7 +3,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/network)
 [![GitHub issues](https://img.shields.io/github/issues/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/issues)
 [![GitHub pulls](https://img.shields.io/github/issues-pr/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/pulls)
-[![GitHub watch](https://img.shields.io/github/watcher/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/watch)
+[![GitHub watch](https://img.shields.io/github/watchers/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/watch)
 [![GitHub license](https://img.shields.io/github/license/samhaxr/hackbox?style=flat-square)](https://github.com/samhaxr/hackbox/blob/main/LICENSE)
 
 # HackB0x v2.0
